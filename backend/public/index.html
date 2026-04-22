@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Interview Recording Admin</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 24px;
+        background: #0f1320;
+        color: #f6f8ff;
+        font-family: Inter, Arial, sans-serif;
+      }
+      .card {
+        background: #171d31;
+        border: 1px solid #2b355a;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 16px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px;
+      }
+      label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 13px;
+      }
+      input,
+      select {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid #2b355a;
+        background: #0f1320;
+        color: #f6f8ff;
+        border-radius: 8px;
+        padding: 8px;
+      }
+      button {
+        border: none;
+        background: #2d5bff;
+        color: #fff;
+        padding: 10px 14px;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 10px;
+      }
+      video {
+        width: 100%;
+        max-height: 360px;
+        background: #000;
+        border-radius: 8px;
+      }
+      a {
+        color: #8eb4ff;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Interview Recording Admin (Local MVP)</h1>
+    <div class="card">
+      <div class="grid">
+        <div>
+          <label for="candidateFilter">Candidate</label>
+          <input id="candidateFilter" placeholder="candidate_001" />
+        </div>
+        <div>
+          <label for="statusFilter">Status</label>
+          <select id="statusFilter">
+            <option value="all">All</option>
+            <option value="ended">Ended</option>
+            <option value="created">Created</option>
+          </select>
+        </div>
+        <div>
+          <label for="fromDateFilter">Ended from</label>
+          <input id="fromDateFilter" type="date" />
+        </div>
+        <div>
+          <label for="toDateFilter">Ended to</label>
+          <input id="toDateFilter" type="date" />
+        </div>
+      </div>
+      <div class="row">
+        <button id="refreshBtn">Refresh interviews</button>
+        <button id="applyFiltersBtn">Apply filters</button>
+        <button id="clearFiltersBtn">Clear filters</button>
+        <button id="processBtn">Process all .mjr files</button>
+      </div>
+      <pre id="status">Idle</pre>
+    </div>
+    <div id="recordingList"></div>
+    <script>
+      const statusEl = document.getElementById("status");
+      const listEl = document.getElementById("recordingList");
+      const candidateFilterEl = document.getElementById("candidateFilter");
+      const statusFilterEl = document.getElementById("statusFilter");
+      const fromDateFilterEl = document.getElementById("fromDateFilter");
+      const toDateFilterEl = document.getElementById("toDateFilter");
+      let allInterviews = [];
+
+      function setStatus(text) {
+        statusEl.textContent = text;
+      }
+
+      function escapeHtml(input) {
+        return String(input || "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function renderFileList(files, emptyMessage) {
+        if (!files.length) {
+          return `<p>${emptyMessage}</p>`;
+        }
+        return files
+          .map(
+            (file) =>
+              `<li><a href="${file.url}" target="_blank" rel="noopener noreferrer">${escapeHtml(file.name)}</a></li>`
+          )
+          .join("");
+      }
+
+      function applyFilters(interviews) {
+        const candidateTerm = candidateFilterEl.value.trim().toLowerCase();
+        const statusTerm = statusFilterEl.value;
+        const fromDate = fromDateFilterEl.value ? new Date(fromDateFilterEl.value + "T00:00:00") : null;
+        const toDate = toDateFilterEl.value ? new Date(toDateFilterEl.value + "T23:59:59") : null;
+
+        return interviews.filter((interview) => {
+          const candidateValue = String(interview.candidate_id || "").toLowerCase();
+          const statusValue = String(interview.status || "");
+          const endedAt = interview.ended_at ? new Date(interview.ended_at) : null;
+
+          if (candidateTerm && !candidateValue.includes(candidateTerm)) {
+            return false;
+          }
+          if (statusTerm !== "all" && statusValue !== statusTerm) {
+            return false;
+          }
+          if (fromDate && (!endedAt || endedAt < fromDate)) {
+            return false;
+          }
+          if (toDate && (!endedAt || endedAt > toDate)) {
+            return false;
+          }
+          return true;
+        });
+      }
+
+      function renderInterviews(interviews) {
+        listEl.innerHTML = "";
+        if (!interviews.length) {
+          listEl.innerHTML = '<div class="card">No interviews match current filters.</div>';
+          return;
+        }
+
+        interviews.forEach((interview) => {
+          const card = document.createElement("div");
+          card.className = "card";
+          const convertedPreview = interview.converted_recordings && interview.converted_recordings[0];
+          const safeSessionId = escapeHtml(interview.session_id);
+          card.innerHTML = `
+            <h3>Interview: ${safeSessionId}</h3>
+            <p><strong>Candidate:</strong> ${escapeHtml(interview.candidate_id)}</p>
+            <p><strong>Room:</strong> ${escapeHtml(interview.room_id)}</p>
+            <p><strong>Status:</strong> ${escapeHtml(interview.status)}</p>
+            <p><strong>Ended At:</strong> ${escapeHtml(interview.ended_at || "N/A")}</p>
+            <p><strong>Duration (sec):</strong> ${escapeHtml(interview.duration_seconds || 0)}</p>
+            <div class="row">
+              <button class="convert-one-btn" data-session-id="${safeSessionId}">Convert this interview</button>
+            </div>
+            <h4>Raw Janus files (.mjr)</h4>
+            <ul>${renderFileList(interview.raw_recordings || [], "No .mjr file found yet")}</ul>
+            <h4>Converted recordings (.webm/.mp4)</h4>
+            <ul>${renderFileList(interview.converted_recordings || [], "Not converted yet")}</ul>
+            ${
+              convertedPreview
+                ? `<video controls src="${convertedPreview.url}"></video>
+                   <p><a href="${convertedPreview.url}" download>Download preview file</a></p>`
+                : ""
+            }
+          `;
+          listEl.appendChild(card);
+        });
+
+        document.querySelectorAll(".convert-one-btn").forEach((button) => {
+          button.addEventListener("click", async () => {
+            const sessionId = button.getAttribute("data-session-id");
+            if (!sessionId) {
+              return;
+            }
+            button.disabled = true;
+            setStatus("Converting interview " + sessionId + " ...");
+            const res = await fetch("/recordings/process/" + encodeURIComponent(sessionId), {
+              method: "POST"
+            });
+            const data = await res.json();
+            if (!res.ok) {
+              setStatus("Conversion failed for " + sessionId + ": " + (data.details || data.error));
+              button.disabled = false;
+              return;
+            }
+            setStatus(data.stdout || "Conversion complete for " + sessionId);
+            await loadInterviews();
+          });
+        });
+      }
+
+      async function loadInterviews() {
+        const res = await fetch("/interviews");
+        const data = await res.json();
+        allInterviews = data.interviews || [];
+        renderInterviews(applyFilters(allInterviews));
+      }
+
+      document.getElementById("refreshBtn").addEventListener("click", async () => {
+        setStatus("Refreshing interviews...");
+        await loadInterviews();
+        setStatus("Ready");
+      });
+
+      document.getElementById("applyFiltersBtn").addEventListener("click", () => {
+        renderInterviews(applyFilters(allInterviews));
+        setStatus("Filters applied");
+      });
+
+      document.getElementById("clearFiltersBtn").addEventListener("click", () => {
+        candidateFilterEl.value = "";
+        statusFilterEl.value = "all";
+        fromDateFilterEl.value = "";
+        toDateFilterEl.value = "";
+        renderInterviews(allInterviews);
+        setStatus("Filters cleared");
+      });
+
+      document.getElementById("processBtn").addEventListener("click", async () => {
+        setStatus("Processing .mjr files...");
+        const res = await fetch("/recordings/process", { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) {
+          setStatus("Processing failed: " + (data.details || data.error));
+          return;
+        }
+        setStatus(data.stdout || "Processing complete");
+        await loadInterviews();
+      });
+
+      loadInterviews().catch((err) => setStatus(err.message));
+    </script>
+  </body>
+</html>
