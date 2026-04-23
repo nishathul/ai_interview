@@ -53,14 +53,6 @@ function SessionControls({
           </>
         ) : null}
       </div>
-      {!isAttendMode && session?.start_link ? (
-        <p className="muted">
-          Share link:{" "}
-          <a href={session.start_link} target="_blank" rel="noreferrer">
-            {session.start_link}
-          </a>
-        </p>
-      ) : null}
       {!isAttendMode && statusMessage ? <p className="muted">{statusMessage}</p> : null}
     </section>
   );

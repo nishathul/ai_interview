@@ -57,15 +57,27 @@ npm install
 npm run dev
 ```
 
-### Optional one-command startup
+### One-command startup (entire stack)
 
-From repo root:
+From repo root (after `npm install` in `backend/` and `frontend/` once):
+
+```bash
+npm start
+```
+
+Equivalent:
 
 ```bash
 ./scripts/dev-up.sh
 ```
 
-To stop:
+To stop everything:
+
+```bash
+npm run stop
+```
+
+Or:
 
 ```bash
 ./scripts/dev-down.sh

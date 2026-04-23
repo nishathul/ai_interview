@@ -1,0 +1,8 @@
+{
+  "name": "interview-stream",
+  "private": true,
+  "scripts": {
+    "start": "bash scripts/dev-up.sh",
+    "stop": "bash scripts/dev-down.sh"
+  }
+}
